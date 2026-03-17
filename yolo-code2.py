@@ -1,8 +1,7 @@
 import streamlit as st
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 from ultralytics import YOLO
-import cv2
 import os
 import base64
 from openai import OpenAI
@@ -18,38 +17,36 @@ st.title("🧠 Bildanalyse mit YOLO + KI")
 uploaded_file = st.file_uploader("Bild hochladen", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
-    image = Image.open(uploaded_file)
+    image = Image.open(uploaded_file).convert("RGB")
     img_array = np.array(image)
 
     st.image(image, caption="Originalbild", use_column_width=True)
 
-    # YOLO Erkennung
+    # YOLO Objekterkennung
     results = model(img_array)
     boxes = results[0].boxes
     names = model.names
 
     detected_objects = []
-    img_with_boxes = img_array.copy()
+
+    # Bild für Bounding Boxes vorbereiten
+    img_with_boxes = image.copy()
+    draw = ImageDraw.Draw(img_with_boxes)
+
+    try:
+        font = ImageFont.truetype("arial.ttf", 20)
+    except:
+        font = ImageFont.load_default()
 
     for box in boxes:
         cls_id = int(box.cls[0])
         conf = float(box.conf[0])
         label = names[cls_id]
-
         detected_objects.append(f"{label} ({conf:.2f})")
 
         x1, y1, x2, y2 = map(int, box.xyxy[0])
-
-        cv2.rectangle(img_with_boxes, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        cv2.putText(
-            img_with_boxes,
-            f"{label} {conf:.2f}",
-            (x1, y1 - 10),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (0, 255, 0),
-            2,
-        )
+        draw.rectangle([x1, y1, x2, y2], outline="green", width=3)
+        draw.text((x1, y1 - 15), f"{label} {conf:.2f}", fill="green", font=font)
 
     st.subheader("🔍 Erkannte Objekte")
     if detected_objects:
@@ -67,7 +64,6 @@ if uploaded_file:
 
     # OpenAI Beschreibung
     st.subheader("📝 KI-Beschreibung")
-
     try:
         response = client.responses.create(
             model="gpt-4.1-mini",
@@ -84,9 +80,7 @@ if uploaded_file:
                 }
             ],
         )
-
         description = response.output[0].content[0].text
         st.write(description)
-
     except Exception as e:
         st.error(f"API Fehler: {e}")
