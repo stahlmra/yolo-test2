@@ -1,52 +1,36 @@
 import streamlit as st
-from PIL import Image, ImageDraw, ImageFont
-import numpy as np
 from ultralytics import YOLO
+from PIL import Image
+import tempfile
 
-# YOLO Modell laden
+# YOLOv8 Modell laden (Standard: yolov8n.pt)
 model = YOLO("yolov8n.pt")
 
-st.title("🧠 Bildanalyse mit YOLO")
+st.title("Bildinhalt-Analysator mit YOLOv8")
+st.write("Lade ein Bild hoch, und das Modell beschreibt, was darauf zu sehen ist.")
 
-uploaded_file = st.file_uploader("Bild hochladen", type=["jpg", "jpeg", "png"])
+# Bild-Upload
+uploaded_file = st.file_uploader("Wähle ein Bild", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
-    image = Image.open(uploaded_file).convert("RGB")
-    img_array = np.array(image)
-
-    st.image(image, caption="Originalbild", use_column_width=True)
-
-    # YOLO Objekterkennung
-    results = model(img_array)
-    boxes = results[0].boxes
-    names = model.names
-
-    detected_objects = []
-
-    # Bild für Bounding Boxes vorbereiten
-    img_with_boxes = image.copy()
-    draw = ImageDraw.Draw(img_with_boxes)
-
-    try:
-        font = ImageFont.truetype("arial.ttf", 20)
-    except:
-        font = ImageFont.load_default()
-
-    for box in boxes:
-        cls_id = int(box.cls[0])
-        conf = float(box.conf[0])
-        label = names[cls_id]
-        detected_objects.append(f"{label} ({conf:.2f})")
-
-        x1, y1, x2, y2 = map(int, box.xyxy[0])
-        draw.rectangle([x1, y1, x2, y2], outline="green", width=3)
-        draw.text((x1, y1 - 15), f"{label} {conf:.2f}", fill="green", font=font)
-
-    st.subheader("🔍 Erkannte Objekte")
-    if detected_objects:
-        for obj in detected_objects:
-            st.write(f"- {obj}")
+    # Bild öffnen
+    image = Image.open(uploaded_file)
+    st.image(image, caption="Hochgeladenes Bild", use_column_width=True)
+    
+    # Temporäre Datei speichern, da YOLO Pfad oder Array akzeptiert
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_file:
+        image.save(tmp_file.name)
+        tmp_path = tmp_file.name
+    
+    # Objekterkennung durchführen
+    results = model(tmp_path)[0]
+    
+    # Erkannten Objekte extrahieren
+    detected_objects = results.names  # Klassen-Name Mapping
+    labels = [detected_objects[int(box.cls)] for box in results.boxes]  # erkannten Labels
+    
+    if labels:
+        st.subheader("Erkannte Objekte:")
+        st.write(", ".join(labels))
     else:
-        st.write("Keine Objekte erkannt")
-
-    st.image(img_with_boxes, caption="Mit Bounding Boxes", use_column_width=True)
+        st.write("Keine Objekte erkannt.")
